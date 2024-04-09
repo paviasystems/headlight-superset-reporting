@@ -5,9 +5,9 @@ import { toMysqlFriendlyDatetime } from '../helpers/date-helpers.mjs';
 
 // Create the connection to database
 const connection = await mysql.createConnection({
-	host: 'localhost',
-	user: 'root',
-	password: 'my-secret-pw',
+	host: process.env.MYSQL_HOST,
+	user: process.env.MYSQL_USER,
+	password: process.env.MYSQL_PW,
 });
 connection.config.namedPlaceholders = true;
 
@@ -181,8 +181,6 @@ for (let user of headlightUsers) {
     WHERE name = ?`,
     [user.email, user.githubUsername, user.jiraUserID, user.isSenior, user.name]  
   );
-  console.log(JSON.stringify(res));
-  console.log(res.affectedRows);
   if (res.affectedRows === 0) {
     await connection.query(`
       INSERT INTO supa.HeadlightUsers (
@@ -230,6 +228,20 @@ await connection.query(`create table if not exists supa.GithubDailyContributions
                         );
 `);
 
+console.log('Creating GithubCommits table');
+await connection.query(`create table if not exists supa.GithubCommits
+                        (
+                            commitID varchar(100) not null,
+                            userID int not null,
+                            date     datetime    null,
+                            additions integer null,
+                            deletions integer null,
+                            changedFiles integer null,
+                            FOREIGN KEY (userID) REFERENCES supa.HeadlightUsers(id),
+                            PRIMARY KEY (commitID)
+                        );
+`);
+
 const [users, fields] = await connection.query(`
   SELECT
     id, email, githubUsername, jiraUserID, name, lastRanForDate, isSenior, disabledDate
@@ -238,99 +250,93 @@ const [users, fields] = await connection.query(`
 );
 
 for(let user of users) {
-	console.log('Fetching Github Contribution Data ', user.githubUsername);
-	const res = await queryGithubData(user.githubUsername);
-  // console.log(JSON.stringify(res));
+  console.log('Fetching Github Contribution Data ', user.githubUsername);
+  const res = await queryGithubData(user.githubUsername);
 
-  const contributionsCollection = res.data.user.contributionsCollection;
-
-  // Update yearly contributions
-  await connection.query(`
-    INSERT INTO supa.GithubYearlyContributions (
-      userID,
-      startedAt,
-      endedAt,
-      totalCommitContributions,
-      totalIssueContributions,
-      totalPullRequestContributions,
-      totalPullRequestReviewContributions,
-      totalRepositoriesWithContributedCommits,
-      totalRepositoriesWithContributedIssues,
-      totalRepositoriesWithContributedPullRequestReviews,
-      totalRepositoriesWithContributedPullRequests,
-      totalRepositoryContributions
-    )
-    VALUES (
-      :userID,
-      CONVERT(:startedAt, DATETIME),
-      CONVERT(:endedAt, DATETIME),
-      :totalCommitContributions,
-      :totalIssueContributions,
-      :totalPullRequestContributions,
-      :totalPullRequestReviewContributions,
-      :totalRepositoriesWithContributedCommits,
-      :totalRepositoriesWithContributedIssues,
-      :totalRepositoriesWithContributedPullRequestReviews,
-      :totalRepositoriesWithContributedPullRequests,
-      :totalRepositoryContributions
-    )
-    ON DUPLICATE KEY UPDATE
-      startedAt = CONVERT(:startedAt, DATETIME),
-      endedAt = CONVERT(:endedAt, DATETIME),
-      totalCommitContributions = :totalCommitContributions,
-      totalIssueContributions = :totalIssueContributions,
-      totalPullRequestContributions = :totalPullRequestContributions,
-      totalPullRequestReviewContributions = :totalPullRequestReviewContributions,
-      totalRepositoriesWithContributedCommits = :totalRepositoriesWithContributedCommits,
-      totalRepositoriesWithContributedIssues = :totalRepositoriesWithContributedIssues,
-      totalRepositoriesWithContributedPullRequestReviews = :totalRepositoriesWithContributedPullRequestReviews,
-      totalRepositoriesWithContributedPullRequests = :totalRepositoriesWithContributedPullRequests,
-      totalRepositoryContributions = :totalRepositoryContributions
-    `,
-    {
-      userID: user.id,
-      startedAt: toMysqlFriendlyDatetime(contributionsCollection.startedAt),
-      endedAt: toMysqlFriendlyDatetime(contributionsCollection.endedAt),
-      totalCommitContributions: contributionsCollection.totalCommitContributions,
-      totalIssueContributions: contributionsCollection.totalIssueContributions,
-      totalPullRequestContributions: contributionsCollection.totalPullRequestContributions,
-      totalPullRequestReviewContributions: contributionsCollection.totalPullRequestReviewContributions,
-      totalRepositoriesWithContributedCommits: contributionsCollection.totalRepositoriesWithContributedCommits,
-      totalRepositoriesWithContributedIssues: contributionsCollection.totalRepositoriesWithContributedIssues,
-      totalRepositoriesWithContributedPullRequestReviews: contributionsCollection.totalRepositoriesWithContributedPullRequestReviews,
-      totalRepositoriesWithContributedPullRequests: contributionsCollection.totalRepositoriesWithContributedPullRequests,
-      totalRepositoryContributions: contributionsCollection.totalRepositoryContributions
+  if (res.data !== null) {
+    const contributionsCollection = res.data.user.contributionsCollection;
+    // Update yearly contributions
+    await connection.query(`
+      INSERT INTO supa.GithubYearlyContributions (
+        userID,
+        startedAt,
+        endedAt,
+        totalCommitContributions,
+        totalIssueContributions,
+        totalPullRequestContributions,
+        totalPullRequestReviewContributions,
+        totalRepositoriesWithContributedCommits,
+        totalRepositoriesWithContributedIssues,
+        totalRepositoriesWithContributedPullRequestReviews,
+        totalRepositoriesWithContributedPullRequests,
+        totalRepositoryContributions
+      )
+      VALUES (
+        :userID,
+        CONVERT(:startedAt, DATETIME),
+        CONVERT(:endedAt, DATETIME),
+        :totalCommitContributions,
+        :totalIssueContributions,
+        :totalPullRequestContributions,
+        :totalPullRequestReviewContributions,
+        :totalRepositoriesWithContributedCommits,
+        :totalRepositoriesWithContributedIssues,
+        :totalRepositoriesWithContributedPullRequestReviews,
+        :totalRepositoriesWithContributedPullRequests,
+        :totalRepositoryContributions
+      )
+      ON DUPLICATE KEY UPDATE
+        startedAt = CONVERT(:startedAt, DATETIME),
+        endedAt = CONVERT(:endedAt, DATETIME),
+        totalCommitContributions = :totalCommitContributions,
+        totalIssueContributions = :totalIssueContributions,
+        totalPullRequestContributions = :totalPullRequestContributions,
+        totalPullRequestReviewContributions = :totalPullRequestReviewContributions,
+        totalRepositoriesWithContributedCommits = :totalRepositoriesWithContributedCommits,
+        totalRepositoriesWithContributedIssues = :totalRepositoriesWithContributedIssues,
+        totalRepositoriesWithContributedPullRequestReviews = :totalRepositoriesWithContributedPullRequestReviews,
+        totalRepositoriesWithContributedPullRequests = :totalRepositoriesWithContributedPullRequests,
+        totalRepositoryContributions = :totalRepositoryContributions
+      `,
+      {
+        userID: user.id,
+        startedAt: toMysqlFriendlyDatetime(contributionsCollection.startedAt),
+        endedAt: toMysqlFriendlyDatetime(contributionsCollection.endedAt),
+        totalCommitContributions: contributionsCollection.totalCommitContributions,
+        totalIssueContributions: contributionsCollection.totalIssueContributions,
+        totalPullRequestContributions: contributionsCollection.totalPullRequestContributions,
+        totalPullRequestReviewContributions: contributionsCollection.totalPullRequestReviewContributions,
+        totalRepositoriesWithContributedCommits: contributionsCollection.totalRepositoriesWithContributedCommits,
+        totalRepositoriesWithContributedIssues: contributionsCollection.totalRepositoriesWithContributedIssues,
+        totalRepositoriesWithContributedPullRequestReviews: contributionsCollection.totalRepositoriesWithContributedPullRequestReviews,
+        totalRepositoriesWithContributedPullRequests: contributionsCollection.totalRepositoriesWithContributedPullRequests,
+        totalRepositoryContributions: contributionsCollection.totalRepositoryContributions
+      }
+    );
+  
+    // Update daily contributions
+    for(let week of contributionsCollection.contributionCalendar.weeks) {
+      for(let day of week.contributionDays) {
+        await connection.query(
+          'INSERT INTO supa.GithubDailyContributions (userID, date, contributionCount) VALUES (?, CONVERT(?, DATETIME), ?) ON DUPLICATE KEY UPDATE `contributionCount` = ?',
+          [user.id, day.date, day.contributionCount, day.contributionCount]
+        );
+      }
     }
-  );
+  }
 
-  // Update daily contributions
-	for(let week of contributionsCollection.contributionCalendar.weeks) {
-		for(let day of week.contributionDays) {
-			await connection.query(
-				'INSERT INTO supa.GithubDailyContributions (userID, date, contributionCount) VALUES (?, CONVERT(?, DATETIME), ?) ON DUPLICATE KEY UPDATE `contributionCount` = ?',
-				[user.id, day.date, day.contributionCount, day.contributionCount]
-			);
-		}
-	}
-
-  // TODO: Git commit data, gather some stats
-    // const commitRes = await queryGithubCommits(user.githubUsername);
-    // // console.log(JSON.stringify(commitRes));
-    // let additions = 0;
-    // let deletions = 0;
-    // let changedFiles = 0;
-    // let totalCommits = 0;
-    // for (let repos of commitRes.data.user.repositoriesContributedTo.nodes) {
-    //   for (let commit of repos.refs.nodes) {
-    //     additions += commit.target.additions;
-    //     deletions += commit.target.deletions;
-    //     changedFiles += commit.target.changedFilesIfAvailable;
-    //     totalCommits += 1;
-    //   }
-    // }
-    // console.log("Average additions: ", additions / totalCommits);
-    // console.log("Average deletions: ", deletions / totalCommits);
-    // console.log("Average changed files: ", changedFiles / totalCommits);
+  // Git commit data, gather some stats
+  const commitRes = await queryGithubCommits(user.githubUsername);
+  if (commitRes.data !== null) {
+    for (let repos of commitRes.data.user.repositoriesContributedTo.nodes) {
+      for (let commit of repos.refs.nodes) {
+        await connection.query(
+          'INSERT INTO supa.GithubCommits (userID, commitID, date, additions, deletions, changedFiles) VALUES (?, ?, CONVERT(?, DATETIME), ?, ?, ?) ON DUPLICATE KEY UPDATE commitID = ?',
+          [user.id, commit.target.id, toMysqlFriendlyDatetime(commit.target.committedDate), commit.target.additions, commit.target.deletions, commit.target.changedFilesIfAvailable, commit.target.id]
+        )
+      }
+    }
+  }
 
   // Update lastRanForDate date for the user
   await connection.query(
@@ -410,6 +416,7 @@ async function queryGithubCommits(user) {
                 nodes {
                   target {
                     ... on Commit {
+                      id
                       additions
                       changedFilesIfAvailable
                       committedDate
