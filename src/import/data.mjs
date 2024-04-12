@@ -201,8 +201,8 @@ console.log('Creating GithubYearlyData table');
 await connection.query(`create table if not exists supa.GithubYearlyContributions
                         (
                             userID int not null,
-                            startedAt datetime null,
-                            endedAt datetime null,
+                            startedAt date null,
+                            endedAt date null,
                             totalCommitContributions int null,
                             totalIssueContributions int null,
                             totalPullRequestContributions int null,
@@ -221,7 +221,7 @@ console.log('Creating GithubDailyData table');
 await connection.query(`create table if not exists supa.GithubDailyContributions
                         (
                             userID int not null,
-                            date     datetime    null,
+                            date     date    null,
                             contributionCount  int         null,
                             FOREIGN KEY (userID) REFERENCES supa.HeadlightUsers(id),
                             constraint user_day unique (userID, date)
