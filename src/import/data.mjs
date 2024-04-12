@@ -246,8 +246,8 @@ const [users, fields] = await connection.query(`
   SELECT
     id, email, githubUsername, jiraUserID, name, lastRanForDate, isSenior, disabledDate
   FROM
-    supa.HeadlightUsers`
-);
+    supa.HeadlightUsers
+    `);
 
 for(let user of users) {
   console.log('Fetching Github Contribution Data ', user.githubUsername);
@@ -273,8 +273,8 @@ for(let user of users) {
       )
       VALUES (
         :userID,
-        CONVERT(:startedAt, DATETIME),
-        CONVERT(:endedAt, DATETIME),
+        CONVERT(:startedAt, DATE),
+        CONVERT(:endedAt, DATE),
         :totalCommitContributions,
         :totalIssueContributions,
         :totalPullRequestContributions,
@@ -286,8 +286,8 @@ for(let user of users) {
         :totalRepositoryContributions
       )
       ON DUPLICATE KEY UPDATE
-        startedAt = CONVERT(:startedAt, DATETIME),
-        endedAt = CONVERT(:endedAt, DATETIME),
+        startedAt = CONVERT(:startedAt, DATE),
+        endedAt = CONVERT(:endedAt, DATE),
         totalCommitContributions = :totalCommitContributions,
         totalIssueContributions = :totalIssueContributions,
         totalPullRequestContributions = :totalPullRequestContributions,
@@ -318,7 +318,7 @@ for(let user of users) {
     for(let week of contributionsCollection.contributionCalendar.weeks) {
       for(let day of week.contributionDays) {
         await connection.query(
-          'INSERT INTO supa.GithubDailyContributions (userID, date, contributionCount) VALUES (?, CONVERT(?, DATETIME), ?) ON DUPLICATE KEY UPDATE `contributionCount` = ?',
+          'INSERT INTO supa.GithubDailyContributions (userID, date, contributionCount) VALUES (?, CONVERT(?, DATE), ?) ON DUPLICATE KEY UPDATE `contributionCount` = ?',
           [user.id, day.date, day.contributionCount, day.contributionCount]
         );
       }
@@ -327,6 +327,7 @@ for(let user of users) {
 
   // Git commit data, gather some stats
   const commitRes = await queryGithubCommits(user.githubUsername);
+  // console.log(JSON.stringify(commitRes));
   if (commitRes.data !== null) {
     for (let repos of commitRes.data.user.repositoriesContributedTo.nodes) {
       for (let commit of repos.refs.nodes) {
@@ -421,6 +422,16 @@ async function queryGithubCommits(user) {
                       changedFilesIfAvailable
                       committedDate
                       deletions
+                      status {
+                        contexts {
+                          context
+                          description
+                          state
+                        }
+                        state
+                      }
+                      url
+                      committedDate
                     }
                   }
                 }
